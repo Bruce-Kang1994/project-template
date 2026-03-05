@@ -1,6 +1,6 @@
-# Project Template -- Solo Ship
+# Project Template
 
-Claude Code 自主开发引擎。给一个 idea，Claude 自己跑完 调研 → 需求 → 开发 → 部署 全流程。
+Claude Code 自主项目引擎。3 个 Skill 覆盖产品全生命周期：建设 → 评审 → 算法审计。
 
 ---
 
@@ -102,10 +102,24 @@ project-template/
   .claude/
     skills/
       solo-ship/
-        SKILL.md         <-- 自主开发引擎的完整指令
+        SKILL.md           <-- 自主开发引擎（idea -> 部署全流程）
+      product-review/
+        SKILL.md           <-- 全方位产品评审（品牌/功能/逻辑/UI/竞品/执行计划）
+      algorithm-audit/
+        SKILL.md           <-- 算法模型审计（框架对标/BARS/权重/分层/原型系统）
   .gitignore               <-- 排除 settings.json、node_modules、.env 等
   README.md                <-- 你正在看的这个文件
 ```
+
+### 三个 Skill 的关系
+
+| Skill | 什么时候用 | 触发方式 |
+|-------|----------|---------|
+| **solo-ship** | 从零开始建产品 | "I want to build..." |
+| **product-review** | 产品建完后做全方位评审 | "Review this product" |
+| **algorithm-audit** | 产品包含评分/排名/分类算法时 | "Audit the algorithm" |
+
+`solo-ship` 在 Phase 4（打磨）结束后会提示你运行另外两个 skill 做深度审计。
 
 ## 常见问题
 

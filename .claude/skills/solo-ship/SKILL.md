@@ -151,6 +151,10 @@ Once activated, run through these phases sequentially. Do NOT pause between phas
 
 **Quality gate:** Complete user journey works end-to-end, build is clean
 
+**Post-polish audit (recommended):**
+- Run the `product-review` skill for a comprehensive product audit (brand, features, UI, logic bugs, competitive positioning)
+- If the product contains a scoring/evaluation/ranking algorithm, also run the `algorithm-audit` skill to validate the model's theoretical grounding, behavioral anchoring, and weight calibration
+
 ---
 
 ### Phase 5: Deploy (autonomous)
