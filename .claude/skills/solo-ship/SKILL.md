@@ -1,10 +1,10 @@
 ---
 name: solo-ship
-description: "Autonomous project engine -- from idea to deployed test environment. User provides the idea, Claude runs the entire lifecycle: research, PRD, tech selection, development, testing, deployment. Minimal human intervention required."
+description: "Autonomous project engine -- from idea to deployed production environment. User provides the idea, Claude runs the entire lifecycle: research, PRD, tech selection, development, testing, payment integration, deployment. Minimal human intervention required."
 metadata:
   author: bruce
-  version: "1.0"
-  last-updated: "2026-03-05"
+  version: "2.0"
+  last-updated: "2026-03-06"
   origin: "Distilled from Caliber project (PM assessment tool) full lifecycle with Claude Code"
 ---
 
@@ -86,7 +86,7 @@ Once activated, run through these phases sequentially. Do NOT pause between phas
   - **Database:** Supabase (auth + DB + storage in one)
   - **AI features:** OpenAI API or Claude API (pick based on task fit)
   - **Deployment:** Vercel (zero-config for Next.js)
-  - **Payments (when needed):** Stripe or LemonSqueezy
+  - **Payments (when needed):** LemonSqueezy (simpler) or Stripe (more control)
 - Initialize the project: `npx create-next-app@latest`
 - Set up the foundational structure
 - Create CLAUDE.md in project root with:
@@ -132,6 +132,16 @@ Once activated, run through these phases sequentially. Do NOT pause between phas
 - Micro-animations for state changes (fade-in, count-up, slide). Not decorative -- functional
 - Typography hierarchy: one font family, 3-4 sizes max, clear visual weight
 
+**Performance principles (learned from Caliber):**
+- For AI API calls that may take >10s, use NDJSON streaming to keep the connection alive:
+  ```
+  ReadableStream + TextEncoder + JSON.stringify(data) + "\n"
+  Content-Type: application/x-ndjson
+  ```
+- Client-side: consume with `reader.read()` loop, parse line-by-line
+- Set `maxDuration = 60` on API routes that call external AI services (Vercel free tier limit)
+- Reduce `max_tokens` to the minimum needed (e.g., 1500-2000 instead of 4000)
+
 **Quality gate after each feature:** `npx tsc --noEmit && npm run build` passes
 
 ---
@@ -157,30 +167,128 @@ Once activated, run through these phases sequentially. Do NOT pause between phas
 
 ---
 
-### Phase 5: Deploy (autonomous)
+### Phase 5: Payment Integration (when needed)
 
-**Claude does:**
-- Initialize git repo if not already done
-- Create `.env.example` with all required environment variables (no real values)
-- Ensure `.gitignore` covers `.env.local`, `node_modules`, `.next`, etc.
-- Deploy to Vercel:
-  ```
-  npx vercel --yes
-  ```
-- If Vercel CLI is not installed, install it first
-- Verify deployment URL loads correctly
-- Report the live URL to the user
+> Skip if the product is free or payments are deferred to a later version.
 
-**If deployment requires environment variables (API keys, DB URLs):**
-- Tell the user exactly which env vars are needed and where to get them
-- Provide the Vercel dashboard link for setting env vars
-- This is the ONE place where user action is required
+**LemonSqueezy setup (preferred for solo devs -- simpler than Stripe, handles tax):**
+
+1. **Create store:**
+   - Go to https://app.lemonsqueezy.com and sign up
+   - Create store with product name, set country
+   - Store will be in Test mode by default -- this is fine for development
+
+2. **Create products:**
+   - Go to Store -> Products -> "+ New Product"
+   - For single purchase: select "Single payment", set price, Tax category = "SaaS - personal use"
+   - For subscription: select "Subscription", set price + billing interval (monthly/yearly)
+   - Click "Publish product" for each
+
+3. **Get API credentials:**
+   - Go to Settings -> API -> create a new API Key
+   - Get Store ID and Variant IDs via API:
+     ```bash
+     # Get Store ID
+     curl -s -H "Authorization: Bearer YOUR_API_KEY" \
+       -H "Accept: application/vnd.api+json" \
+       "https://api.lemonsqueezy.com/v1/stores" | python3 -m json.tool
+     # Store ID is in data[0].id
+
+     # Get Variant IDs (one per product)
+     curl -s -H "Authorization: Bearer YOUR_API_KEY" \
+       -H "Accept: application/vnd.api+json" \
+       "https://api.lemonsqueezy.com/v1/variants" | python3 -m json.tool
+     # Each variant has: id, price, is_subscription, product_id
+     ```
+
+4. **Set up webhook (after deployment):**
+   - Go to Settings -> Webhooks -> "+"
+   - Callback URL: `https://YOUR_DOMAIN/api/webhook/lemonsqueezy`
+   - Signing secret: generate a random string, save it as env var
+   - Events: check `order_created` and `subscription_created`
+
+5. **Required environment variables:**
+   ```
+   LEMONSQUEEZY_API_KEY=your-jwt-api-key
+   LEMONSQUEEZY_STORE_ID=your-store-id (number)
+   LEMONSQUEEZY_WEBHOOK_SECRET=your-signing-secret
+   LEMONSQUEEZY_VARIANT_SINGLE=variant-id-for-single-purchase
+   LEMONSQUEEZY_VARIANT_PRO=variant-id-for-subscription
+   ```
+
+**Stripe alternative:** Use when you need more control (custom checkout, metered billing, invoicing). More setup required, but more features.
+
+**Quality gate:** Test mode purchase completes successfully, webhook fires
+
+---
+
+### Phase 6: Deploy to Production (autonomous)
+
+**Pre-deployment checklist:**
+- [ ] `.env.example` exists with all required vars (no real values)
+- [ ] `.gitignore` covers: `.env*`, `!.env.example`, `node_modules/`, `.next/`, `.vercel`
+- [ ] `USE_MOCK=false` (or equivalent) for production
+- [ ] All code committed to git
+- [ ] Build passes locally: `npm run build`
+
+**Vercel deployment (step-by-step):**
+
+```bash
+# 1. Login (opens browser for OAuth)
+npx vercel login
+
+# 2. Link project to Vercel
+npx vercel link --yes
+
+# 3. Add environment variables (one per command, pipe the value)
+echo "your-value" | npx vercel env add VAR_NAME production
+
+# 4. Verify all env vars are set
+npx vercel env ls
+
+# 5. Deploy to production
+npx vercel --prod
+```
+
+**Key gotchas learned from production:**
+- `vercel link` needs `--yes` flag to avoid interactive prompts in CI/CLI
+- `vercel env add` only accepts ONE environment at a time (production/preview/development)
+- Pipe values via `echo "value" | npx vercel env add NAME production`
+- Zsh interprets `[` in paths as glob -- always quote: `git add "src/app/[locale]/..."`
+- Vercel env vars are set per-project, NOT per-team (go to Project -> Settings -> Environment Variables)
+
+**Supabase database setup:**
+- Go to Supabase project dashboard -> SQL Editor -> New query
+- Paste `schema.sql` and click Run
+- If tables already exist, you'll get "relation already exists" -- that's OK, skip it
+- Verify tables in Table Editor (should show all expected tables)
 
 **Quality gate:** Live URL is accessible and functional
 
 ---
 
-### Phase 6: Handoff Report
+### Phase 7: Domain & DNS (optional)
+
+**Domain purchase options:**
+- **Namecheap:** https://www.namecheap.com -- cheapest, good UI
+- **Cloudflare Registrar:** https://www.cloudflare.com/products/registrar/ -- at-cost pricing (no markup), best value
+- **GoDaddy:** https://www.godaddy.com -- most popular but pricier
+- **Google Domains (now Squarespace):** https://domains.squarespace.com
+- **Vercel Domains:** can buy directly in Vercel dashboard (Settings -> Domains -> Buy)
+
+**Recommended:** Cloudflare Registrar (cheapest long-term) or buy directly in Vercel (simplest setup).
+
+**After purchasing:**
+- Vercel: Project Settings -> Domains -> Add Domain -> enter your domain
+- Vercel will give you DNS records (usually A record or CNAME)
+- Add those records at your domain registrar
+- SSL certificate is automatic on Vercel
+
+**Tip:** `caliber-nine.vercel.app` works perfectly fine for MVP validation. Buy a domain only after you've confirmed product-market fit.
+
+---
+
+### Phase 8: Handoff Report
 
 **Claude outputs a brief summary:**
 
@@ -206,6 +314,11 @@ Once activated, run through these phases sequentially. Do NOT pause between phas
 ### Environment variables needed
 - `API_KEY_X` -- get from [where]
 
+### Payment setup
+- [LemonSqueezy/Stripe] configured in [test/live] mode
+- Products: [list products and prices]
+- Webhook: [URL]
+
 ### Next steps (if you want to keep going)
 1. [Most impactful next feature]
 2. [Second priority]
@@ -221,6 +334,7 @@ Things that REQUIRE user input (pause and ask):
 - Domain name decisions
 - Business model decisions (pricing, target market) that affect architecture
 - Legal/compliance requirements
+- Payment provider account creation (user must sign up themselves)
 
 Things that DO NOT require user input (just decide):
 - Tech stack choices
